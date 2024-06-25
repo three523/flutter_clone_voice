@@ -1,20 +1,26 @@
 import 'dart:async';
-
+import 'package:flutter/scheduler.dart';
 import 'package:get/get.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
-class PlayController extends GetxController {
+class PlayController extends GetxController
+    with GetSingleTickerProviderStateMixin {
   final player = AudioPlayer();
   final record = Record();
+  Ticker? _ticker;
+  Duration duration = Duration.zero;
   bool isRecording = false;
-  Timer? itmer;
   StreamSubscription<RecordState>? listener;
+  Function(RecordState)? onChangeRecordState;
+  // Function(Duration)? onChangeTime;
+  bool isNeedTime;
   String? audioPath;
 
-  PlayController() {
+  PlayController({this.onChangeRecordState, this.isNeedTime = false}) {
     setRecordListener();
+    initTicker();
   }
 
   @override
@@ -25,11 +31,20 @@ class PlayController extends GetxController {
 
   void setRecordListener() {
     final stream = record.onStateChanged();
-    stream.listen(updateState,
-        onDone: () => print('done'), onError: () => print('error'));
+    stream.listen(onChangeRecordState, onDone: () => print('done'));
   }
 
-  void updateAudioRecorder() async {
+  void initTicker() {
+    if (isNeedTime) {
+      _ticker = createTicker(onChangeTime);
+    }
+  }
+
+  void onChangeTime(Duration newDuration) {
+    duration = newDuration;
+  }
+
+  void audioRecord() async {
     if (await record.hasPermission()) {
       isRecording ? stop() : start();
     } else {
@@ -40,23 +55,17 @@ class PlayController extends GetxController {
   void start() async {
     final directory = await getApplicationDocumentsDirectory();
     await record.start(path: directory.path);
+    _ticker?.start();
+    isRecording = true;
   }
 
-  void stop() async {
+  void stop() {
     record.stop();
+    _ticker?.stop();
+    isRecording = false;
   }
 
-  void updateState(RecordState state) {
-    switch (state) {
-      case RecordState.record:
-        print('record');
-        break;
-      case RecordState.pause:
-        print('pause');
-        break;
-      case RecordState.stop:
-        print('cancel');
-        break;
-    }
+  void cancel() async {
+    duration = Duration.zero;
   }
 }
